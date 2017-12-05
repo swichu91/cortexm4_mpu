@@ -311,17 +311,6 @@ _start (void)
     }
 #endif
 
-/*  extern unsigned int __priv_regions_array_start;
-  extern unsigned int __priv_regions_array_end;
-
-  for (unsigned int *p = &__priv_regions_array_start;
-      p < &__priv_regions_array_end;)
-    {
-      unsigned int* region_begin = (unsigned int*) (*p++);
-      unsigned int* region_end = (unsigned int*) (*p++);
-      __initialize_bss (region_begin, region_end);
-    }*/
-
 #if defined(DEBUG) && (OS_INCLUDE_STARTUP_GUARD_CHECKS)
   if ((__bss_begin_guard != 0) || (__bss_end_guard != 0))
     {
