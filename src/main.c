@@ -262,9 +262,6 @@ main(int argc, char* argv[])
 	BY DEFAULT EVERY TASK HAS ACCESS TO PERIPHERAL REGISTERS!
    */
 
-
-
-
   //xTaskCreateRestricted( &xRegTest1Parameters, NULL );
 
 
