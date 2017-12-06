@@ -200,6 +200,9 @@ void SystemInit(void)
 #else
   SCB->VTOR = FLASH_BASE | VECT_TAB_OFFSET; /* Vector Table Relocation in Internal FLASH */
 #endif
+
+  /*Enable div by zero error handler */
+  SCB->CCR |=  SCB_CCR_DIV_0_TRP_Msk;
 }
 
 /**

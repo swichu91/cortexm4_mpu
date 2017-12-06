@@ -46,6 +46,15 @@ _start (void);
 
 #if defined(DEBUG)
 
+
+void printErrorMsg(const char * errMsg)
+{
+   while(*errMsg != '\0'){
+      ITM_SendChar(*errMsg);
+      ++errMsg;
+   }
+}
+
 // The DEBUG version is not naked, but has a proper stack frame,
 // to allow setting breakpoints at Reset_Handler.
 void __attribute__ ((section(".after_vectors"),noreturn))
@@ -127,6 +136,7 @@ dumpExceptionStack (ExceptionStackFrame* frame,
   if (cfsr & (1UL << 15))
     {
       trace_printf (" BFAR =  %08X\n", bfar);
+      trace_printf("Check BFAR for memory address, Check PC for instruction\n");
     }
   trace_printf ("Misc\n");
   trace_printf (" LR/EXC_RETURN= %08X\n", lr);
@@ -362,6 +372,44 @@ HardFault_Handler (void)
   );
 }
 
+void printUsageErrorMsg(uint32_t CFSRValue)
+{
+	trace_printf("Usage fault: ");
+   CFSRValue >>= 16;                  // right shift to lsb
+   if((CFSRValue & (1 << 9)) != 0) {
+	   trace_printf("Divide by zero\n");
+   }else if ((CFSRValue & (1 << 8)) != 0){
+	   trace_printf("Unaligned access\n");
+   }else if ((CFSRValue & (1 << 3)) != 0){
+	   trace_printf("The processor has attempted to access a coprocessor that does not exist\n");
+   }
+
+}
+
+void printMemoryManagementErrorMsg(uint32_t CFSRValue)
+{
+   trace_printf("Memory Management fault: ");
+   CFSRValue &= 0x000000FF; // mask just mem faults
+   if((CFSRValue & (1<<5)) != 0) {
+	   trace_printf("A MemManage fault occurred during FP lazy state preservation\n");
+   }
+   if((CFSRValue & (1<<4)) != 0) {
+	   trace_printf("A derived MemManage fault occurred on exception entry\n");
+   }
+   if((CFSRValue & (1<<3)) != 0) {
+	   trace_printf("A derived MemManage fault occurred on exception return.\n");
+   }
+   if((CFSRValue & (1<<1)) != 0) {
+	   trace_printf("Data access violation.\n");
+   }
+   if((CFSRValue & (1<<0)) != 0) {
+	   trace_printf("MPU or Execute Never (XN) default memory map access violation\n");
+   }
+   if((CFSRValue & (1<<7)) != 0) {
+      trace_printf("SCB->MMFAR = 0x%08x <- memory that caused the access violation \n", SCB->MMFAR );
+   }
+}
+
 void __attribute__ ((section(".after_vectors"),weak,used))
 HardFault_Handler_C (ExceptionStackFrame* frame __attribute__((unused)),
                      uint32_t lr __attribute__((unused)))
@@ -398,6 +446,18 @@ HardFault_Handler_C (ExceptionStackFrame* frame __attribute__((unused)),
   trace_printf ("[HardFault]\n");
   dumpExceptionStack (frame, cfsr, mmfar, bfar, lr);
 #endif // defined(TRACE)
+
+  //check if Usage fault and parse error code
+  if((SCB->CFSR & 0xFFFF0000) != 0) {
+    printUsageErrorMsg(SCB->CFSR);
+ }
+
+  //check if Memory fault and parse error code
+  if((SCB->CFSR & 0xFF) != 0) {
+	  printMemoryManagementErrorMsg(SCB->CFSR);
+ }
+
+  __ASM volatile("BKPT #01");
 
 #if defined(DEBUG)
   __DEBUG_BKPT();
@@ -467,15 +527,38 @@ HardFault_Handler_C (ExceptionStackFrame* frame __attribute__((unused)),
 
 #if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
 
-void __attribute__ ((section(".after_vectors"),weak))
-MemManage_Handler (void)
+
+void __attribute__ ((section(".after_vectors"),weak,used))
+MemManage_Handler_C (ExceptionStackFrame* frame __attribute__((unused)),
+                    uint32_t lr __attribute__((unused)))
 {
+	printMemoryManagementErrorMsg(SCB->CFSR);
+	trace_printf("PC:0x%x",frame->pc);
+
 #if defined(DEBUG)
   __DEBUG_BKPT();
 #endif
   while (1)
     {
     }
+}
+
+void __attribute__ ((section(".after_vectors"),weak))
+MemManage_Handler (void)
+{
+	  asm volatile(
+	      " tst lr,#4       \n"
+	      " ite eq          \n"
+	      " mrseq r0,msp    \n"
+	      " mrsne r0,psp    \n"
+	      " mov r1,lr       \n"
+	      " ldr r2,=MemManage_Handler_C \n"
+	      " bx r2"
+
+	      : /* Outputs */
+	      : /* Inputs */
+	      : /* Clobbers */
+	  );
 }
 
 void __attribute__ ((section(".after_vectors"),weak,naked))
